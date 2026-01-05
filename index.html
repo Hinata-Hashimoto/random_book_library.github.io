@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>図書館 ランダム10冊ハント</title>
+    <title>図書館 ランダム選書サービス</title>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <style>
         body { font-family: "Helvetica Neue", Arial, sans-serif; padding: 20px; max-width: 900px; margin: 0 auto; background-color: #f4f7f6; color: #333; }
@@ -50,7 +50,7 @@
     </style>
 </head>
 <body>
-    <h1>📚 図書館 ランダム10冊ハント</h1>
+    <h1>📚 図書館 ランダム選書サービス</h1>
     
     <div class="control-panel">
         <div class="row">
@@ -63,7 +63,7 @@
             <label>2. アクション</label>
             <div class="btn-group">
                 <button onclick="startNormalSearch()" class="btn-search">ISBN指定検索</button>
-                <button onclick="startRandomHunt()" class="btn-random">🎲 2文字(読み)で10冊探す</button>
+                <button onclick="startRandomHunt()" class="btn-random">ランダム選書</button>
             </div>
             <input type="text" id="isbnInput" value="9784101061412" placeholder="ISBN (通常検索用)" style="margin-top:10px; font-family: monospace;">
         </div>
