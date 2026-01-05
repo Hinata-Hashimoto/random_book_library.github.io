@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>図書館 ランダム10冊ハント</title>
+    <title>図書館 ランダム選書サービス</title>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <style>
         body { font-family: "Helvetica Neue", Arial, sans-serif; padding: 20px; max-width: 900px; margin: 0 auto; background-color: #f4f7f6; color: #333; }
@@ -18,7 +18,8 @@
         button { flex: 1; padding: 14px; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
         .btn-search { background: #007bff; }
         .btn-search:hover { background: #0069d9; }
-        .btn-random { background: linear-gradient(135deg, #9c27b0, #673ab7); } 
+        /* ガチャっぽい色味 */
+        .btn-random { background: linear-gradient(135deg, #e91e63, #9c27b0); } 
         .btn-random:hover { opacity: 0.9; }
         button:disabled { background: #ccc; cursor: not-allowed; }
 
@@ -26,7 +27,7 @@
         .book-card { background: #fff; padding: 15px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #eee; display: flex; gap: 15px; align-items: start; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: 0.3s; }
         .book-card:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
         
-        /* 表紙がない場合のスタイル */
+        /* 表紙画像がない場合のスタイル */
         .book-cover { width: 80px; height: 110px; object-fit: cover; background: #eee; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 0.8em; font-weight: bold; text-align: center; }
         .no-img-placeholder { background-color: #f0f0f0; border: 1px dashed #ccc; }
 
@@ -34,6 +35,9 @@
         .book-title { font-size: 1.1em; font-weight: bold; margin: 0 0 5px; }
         .book-author { font-size: 0.9em; color: #666; margin-bottom: 8px; }
         
+        /* 検索ヒットキーワードのバッジ */
+        .keyword-badge { display: inline-block; background: #fce4ec; color: #c2185b; font-size: 0.8em; padding: 2px 8px; border-radius: 12px; margin-bottom: 5px; border: 1px solid #f8bbd0; }
+
         .lib-status { margin-top: 8px; font-size: 0.9em; min-height: 24px; }
         .status-tag { display: inline-block; padding: 4px 8px; border-radius: 4px; margin: 2px; font-size: 0.85em; font-weight: bold; border: 1px solid transparent; }
         .ok { background: #d4edda; color: #155724; border-color: #c3e6cb; }
@@ -43,7 +47,7 @@
 
         @keyframes blink { 50% { opacity: 0.5; } }
         
-        #huntStatus { font-weight: bold; color: #673ab7; }
+        #huntStatus { font-weight: bold; color: #e91e63; }
         #statusLog { margin-top: 20px; padding: 10px; background: #333; color: #0f0; font-family: monospace; font-size: 12px; height: 100px; overflow-y: scroll; border-radius: 6px; }
     </style>
 </head>
@@ -61,7 +65,7 @@
             <label>2. アクション</label>
             <div class="btn-group">
                 <button onclick="startNormalSearch()" class="btn-search">ISBN指定検索</button>
-                <button onclick="startRandomHunt()" class="btn-random">ランダムに選書する</button>
+                <button onclick="startRandomHunt()" class="btn-random">ランダム選書</button>
             </div>
             <input type="text" id="isbnInput" value="9784101061412" placeholder="ISBN (通常検索用)" style="margin-top:10px; font-family: monospace;">
         </div>
@@ -80,6 +84,7 @@
     <script>
         const PREF_LIST = ["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
         
+        // ランダム生成用ひらがなリスト
         const HIRAGANA = "あいうえおかきくけこさしすせそたちつてとなにぬねのまみむめもらりるれろわをん";
 
         $(document).ready(function(){
@@ -131,21 +136,21 @@
             checkLibraryBatch([isbn], systemId);
         }
 
-        // --- ★ランダム10冊ハント ---
+        // --- ★ランダム10冊ハント（2文字ガチャ） ---
         async function startRandomHunt() {
             const systemId = $('#libSelect').val();
             if(!systemId) return alert('図書館を選んでください');
 
             $('button').prop('disabled', true);
             $('#resultArea').show();
-            $('#bookList').html('<p style="text-align:center; padding:20px; color:#666;">ひらがなを選んで本を探しています...</p>');
+            $('#bookList').html('<p style="text-align:center; padding:20px; color:#666;">2文字の言葉を生成して本を探しています...</p>');
             $('#huntStatus').text('選書中...');
             
             log('ランダム選定開始...');
 
             try {
-                // 1. ひらがな検索で10冊集める
-                let verifiedBooks = await huntBooksByHiragana(10);
+                // 1. 2文字ガチャで本を10冊集める
+                let verifiedBooks = await huntBooksByRandomPairs(10);
                 
                 if (verifiedBooks.length === 0) {
                     throw new Error("本が見つかりませんでした。再試行してください。");
@@ -175,21 +180,27 @@
             }
         }
 
-        // --- 【修正】ひらがな検索ロジック（条件緩和版） ---
-        async function huntBooksByHiragana(targetCount) {
+        // --- 【新実装】ランダム2文字生成＆検索ロジック ---
+        async function huntBooksByRandomPairs(targetCount) {
             let candidates = [];
             let retry = 0;
+            // 2文字だとヒットしないこともあるので、リトライ上限を高めに設定(30回)
+            const MAX_RETRY = 30;
 
-            // 10冊集まるまで繰り返す（最大10回）
-            while (candidates.length < targetCount && retry < 10) {
+            while (candidates.length < targetCount && retry < MAX_RETRY) {
                 retry++;
                 
-                const q = HIRAGANA[Math.floor(Math.random() * HIRAGANA.length)];
-                log(`文字「${q}」で検索中...`);
+                // ★2文字をランダム生成
+                const char1 = HIRAGANA[Math.floor(Math.random() * HIRAGANA.length)];
+                const char2 = HIRAGANA[Math.floor(Math.random() * HIRAGANA.length)];
+                const q = char1 + char2;
+                
+                log(`「${q}」で検索中... (${candidates.length}/${targetCount}冊)`);
 
-                const startIndex = Math.floor(Math.random() * 5); 
-                // Google Books API (intitle指定で確実性を向上)
-                const url = `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(q)}&maxResults=40&startIndex=${startIndex}&printType=books`;
+                // ヒット率を上げるため intitle: (タイトルに含まれる) で検索
+                // 意味のない文字列だと0件になる可能性が高いので、どんどんリトライする設計
+                const startIndex = Math.floor(Math.random() * 5); // 少しばらけさせる
+                const url = `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(q)}&maxResults=20&startIndex=${startIndex}&printType=books`;
 
                 try {
                     const res = await fetch(url);
@@ -201,7 +212,7 @@
                             const ids = item.volumeInfo.industryIdentifiers;
                             if (ids) {
                                 const isbn13 = ids.find(id => id.type === "ISBN_13");
-                                // 日本のISBN(9784...)で、重複していないもの
+                                // 日本のISBN(9784...)のみ対象
                                 if (isbn13 && isbn13.identifier.startsWith('9784')) {
                                     tempIsbns.push(isbn13.identifier);
                                 }
@@ -212,12 +223,15 @@
                         const uniqueIsbns = [...new Set(tempIsbns)];
 
                         if (uniqueIsbns.length > 0) {
+                            // OpenBDで実在確認（タイトルがあるか）
                             const verified = await fetchOpenBDBulk(uniqueIsbns);
+                            
                             for (const book of verified) {
-                                // ★ここを修正: 表紙(cover)がなくても、タイトルがあればOKとする
                                 if (book && book.summary && book.summary.title) {
                                     // 既にリストにある本は除外
                                     if (!candidates.find(c => c.summary.isbn === book.summary.isbn)) {
+                                        // ★検索に使ったキーワードをデータに付与しておく（表示用）
+                                        book.searchKeyword = q;
                                         candidates.push(book);
                                     }
                                 }
@@ -225,9 +239,13 @@
                             }
                         }
                     } else {
-                        log(`「${q}」でのヒットなし`);
+                        // ヒット0件の場合
+                        // log(`「${q}」はヒットなし`);
                     }
                 } catch (e) { console.error(e); }
+                
+                // API制限回避のため少し待機（任意）
+                await new Promise(r => setTimeout(r, 200));
             }
             
             return candidates.slice(0, targetCount);
@@ -236,6 +254,7 @@
         // --- OpenBD一括取得 ---
         async function fetchOpenBDBulk(isbnList) {
             if (isbnList.length === 0) return [];
+            // URL長制限対策のため、あまりに多い場合は分割すべきですが今回は簡易実装
             const uniqueIsbns = [...new Set(isbnList)].join(',');
             try {
                 const res = await fetch('https://api.openbd.jp/v1/get?isbn=' + uniqueIsbns);
@@ -244,7 +263,7 @@
             } catch(e) { return []; }
         }
 
-        // --- 【修正】画面描画（画像なし対応） ---
+        // --- 画面描画 ---
         function renderBookCards(bookDataList) {
             bookDataList.forEach(bookData => {
                 if (!bookData || !bookData.summary) return;
@@ -253,21 +272,22 @@
                 const isbn = b.isbn;
                 const title = b.title || "タイトル不明";
                 const author = b.author || "";
-                const coverSrc = b.cover || ""; // 表紙がない場合は空文字
+                const coverSrc = b.cover || "";
+                const keyword = bookData.searchKeyword || ""; // 検索に使った2文字
                 
-                // 画像タグの生成
-                let imgTag = '';
-                if (coverSrc) {
-                    imgTag = `<img class="book-cover" src="${coverSrc}">`;
-                } else {
-                    // 画像がない場合のプレースホルダー
-                    imgTag = `<div class="book-cover no-img-placeholder">NO<br>IMAGE</div>`;
-                }
+                const imgStyle = coverSrc ? "" : "display:none;";
+                const noImgClass = coverSrc ? "" : "no-img";
+                
+                // キーワードバッジのHTML生成（ランダム検索時のみ表示）
+                const keywordHtml = keyword ? `<span class="keyword-badge">検索語: ${keyword}</span>` : "";
 
                 const html = `
                     <div class="book-card" id="card-${isbn}">
-                        ${imgTag}
+                        <div class="book-cover ${noImgClass}">
+                            ${coverSrc ? `<img src="${coverSrc}" style="width:100%; height:100%; object-fit:cover;">` : 'NO<br>IMAGE'}
+                        </div>
                         <div class="book-details">
+                            ${keywordHtml}
                             <div class="book-title">${title}</div>
                             <div class="book-author">${author}</div>
                             <div class="lib-status" id="status-${isbn}">
