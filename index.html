@@ -52,7 +52,7 @@
     </style>
 </head>
 <body>
-    <h1>📚 図書館 ランダム選書サービス</h1>
+    <h1>📚 図書館 ランダム選書サービス 📚</h1>
     
     <div class="control-panel">
         <div class="row">
@@ -200,7 +200,7 @@
                 // ヒット率を上げるため intitle: (タイトルに含まれる) で検索
                 // 意味のない文字列だと0件になる可能性が高いので、どんどんリトライする設計
                 const startIndex = Math.floor(Math.random() * 5); // 少しばらけさせる
-                const url = `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(q)}&maxResults=20&startIndex=${startIndex}&printType=books`;
+                const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=20&startIndex=${startIndex}&printType=books`;
 
                 try {
                     const res = await fetch(url);
