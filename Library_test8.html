@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>図書館 ランダム10冊ハント</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <style>
+        body { font-family: "Helvetica Neue", Arial, sans-serif; padding: 20px; max-width: 900px; margin: 0 auto; background-color: #f4f7f6; color: #333; }
+        h1 { text-align: center; color: #444; margin-bottom: 20px; }
+        
+        .control-panel { background: #fff; padding: 20px; border-radius: 10px; border: 1px solid #ddd; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .row { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; }
+        select, input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+        
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        button { flex: 1; padding: 14px; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
+        .btn-search { background: #007bff; }
+        .btn-search:hover { background: #0069d9; }
+        .btn-random { background: linear-gradient(135deg, #9c27b0, #673ab7); } 
+        .btn-random:hover { opacity: 0.9; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+
+        #resultArea { margin-top: 20px; display: none; }
+        .book-card { background: #fff; padding: 15px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #eee; display: flex; gap: 15px; align-items: start; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: 0.3s; }
+        .book-card:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        
+        /* 表紙がない場合のスタイル */
+        .book-cover { width: 80px; height: 110px; object-fit: cover; background: #eee; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 0.8em; font-weight: bold; text-align: center; }
+        .no-img-placeholder { background-color: #f0f0f0; border: 1px dashed #ccc; }
+
+        .book-details { flex-grow: 1; }
+        .book-title { font-size: 1.1em; font-weight: bold; margin: 0 0 5px; }
+        .book-author { font-size: 0.9em; color: #666; margin-bottom: 8px; }
+        
+        .lib-status { margin-top: 8px; font-size: 0.9em; min-height: 24px; }
+        .status-tag { display: inline-block; padding: 4px 8px; border-radius: 4px; margin: 2px; font-size: 0.85em; font-weight: bold; border: 1px solid transparent; }
+        .ok { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+        .ng { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+        .waiting { background: #eee; color: #555; padding: 4px 10px; border-radius: 15px; font-size: 0.85em; }
+        .checking { color: #007bff; font-weight: bold; animation: blink 1.5s infinite; }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
+        
+        #huntStatus { font-weight: bold; color: #673ab7; }
+        #statusLog { margin-top: 20px; padding: 10px; background: #333; color: #0f0; font-family: monospace; font-size: 12px; height: 100px; overflow-y: scroll; border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <h1>📚 図書館 ランダム選書サービス</h1>
+    
+    <div class="control-panel">
+        <div class="row">
+            <label>1. エリア選択</label>
+            <select id="prefSelect"><option value="">都道府県を選択...</option></select>
+            <select id="libSelect" disabled style="margin-top:10px;"><option value="">↑先に都道府県を選んでください</option></select>
+        </div>
+
+        <div class="row">
+            <label>2. アクション</label>
+            <div class="btn-group">
+                <button onclick="startNormalSearch()" class="btn-search">ISBN指定検索</button>
+                <button onclick="startRandomHunt()" class="btn-random">ランダムに選書する</button>
+            </div>
+            <input type="text" id="isbnInput" value="9784101061412" placeholder="ISBN (通常検索用)" style="margin-top:10px; font-family: monospace;">
+        </div>
+    </div>
+
+    <div id="resultArea">
+        <h3 style="border-bottom:2px solid #ddd; padding-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+            <span>検索結果</span>
+            <span id="huntStatus"></span>
+        </h3>
+        <div id="bookList"></div>
+    </div>
+
+    <div id="statusLog">準備完了</div>
+
+    <script>
+        const PREF_LIST = ["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
+        
+        const HIRAGANA = "あいうえおかきくけこさしすせそたちつてとなにぬねのまみむめもらりるれろわをん";
+
+        $(document).ready(function(){
+            PREF_LIST.forEach(p => $('#prefSelect').append(new Option(p, p)));
+            $('#prefSelect').change(function() { if($(this).val()) fetchLibraries($(this).val()); });
+        });
+
+        function log(msg) {
+            const div = $('#statusLog');
+            const t = new Date().toLocaleTimeString();
+            div.prepend(`[${t}] ${msg}<br>`);
+        }
+
+        // --- 図書館リスト取得 ---
+        function fetchLibraries(pref) {
+            $('#libSelect').prop('disabled', true).html('<option>取得中...</option>');
+            $.ajax({
+                url: `https://api.calil.jp/library?appkey=&pref=${encodeURIComponent(pref)}&format=json`,
+                dataType: 'jsonp',
+                success: function(data) {
+                    const sel = $('#libSelect').empty().append('<option value="">図書館を選択</option>');
+                    const seen = new Set();
+                    data.forEach(l => {
+                        if (!seen.has(l.systemid)) {
+                            seen.add(l.systemid);
+                            sel.append(new Option(l.systemname, l.systemid));
+                        }
+                    });
+                    sel.prop('disabled', false);
+                    log(`${pref}の図書館を取得完了（${seen.size}件）`);
+                },
+                error: function() { log('図書館リスト取得失敗'); }
+            });
+        }
+
+        // --- 通常検索 ---
+        async function startNormalSearch() {
+            const isbn = $('#isbnInput').val().replace(/[^0-9]/g, '');
+            const systemId = $('#libSelect').val();
+            if(!systemId) return alert('図書館を選んでください');
+            if(isbn.length !== 13) return alert('ISBNは13桁で');
+            
+            $('#resultArea').show();
+            $('#bookList').empty();
+            log(`指定検索開始: ${isbn}`);
+            
+            const bookDataList = await fetchOpenBDBulk([isbn]);
+            renderBookCards(bookDataList);
+            checkLibraryBatch([isbn], systemId);
+        }
+
+        // --- ★ランダム10冊ハント ---
+        async function startRandomHunt() {
+            const systemId = $('#libSelect').val();
+            if(!systemId) return alert('図書館を選んでください');
+
+            $('button').prop('disabled', true);
+            $('#resultArea').show();
+            $('#bookList').html('<p style="text-align:center; padding:20px; color:#666;">ひらがなを選んで本を探しています...</p>');
+            $('#huntStatus').text('選書中...');
+            
+            log('ランダム選定開始...');
+
+            try {
+                // 1. ひらがな検索で10冊集める
+                let verifiedBooks = await huntBooksByHiragana(10);
+                
+                if (verifiedBooks.length === 0) {
+                    throw new Error("本が見つかりませんでした。再試行してください。");
+                }
+
+                log(`${verifiedBooks.length}冊確定。`);
+                $('#bookList').empty();
+                $('#huntStatus').text('リスト作成完了');
+
+                // 2. 画面描画
+                renderBookCards(verifiedBooks);
+                
+                const isbnList = verifiedBooks.map(b => b.summary.isbn);
+
+                // 3. 問い合わせ開始
+                log('1秒後に図書館へ問い合わせます...');
+                setTimeout(() => {
+                    $('#huntStatus').text('図書館へ問い合わせ中...');
+                    $('.lib-status').html('<span class="checking">図書館に問い合わせ中...</span>');
+                    checkLibraryBatch(isbnList, systemId);
+                }, 1000);
+
+            } catch (e) {
+                log('エラー: ' + e);
+                $('#bookList').html(`<p style="color:red; text-align:center;">エラー: ${e.message}</p>`);
+                $('button').prop('disabled', false);
+            }
+        }
+
+        // --- 【修正】ひらがな検索ロジック（条件緩和版） ---
+        async function huntBooksByHiragana(targetCount) {
+            let candidates = [];
+            let retry = 0;
+
+            // 10冊集まるまで繰り返す（最大10回）
+            while (candidates.length < targetCount && retry < 10) {
+                retry++;
+                
+                const q = HIRAGANA[Math.floor(Math.random() * HIRAGANA.length)];
+                log(`文字「${q}」で検索中...`);
+
+                const startIndex = Math.floor(Math.random() * 5); 
+                // Google Books API (intitle指定で確実性を向上)
+                const url = `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(q)}&maxResults=40&startIndex=${startIndex}&printType=books`;
+
+                try {
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    
+                    if (data.items) {
+                        const tempIsbns = [];
+                        for (const item of data.items) {
+                            const ids = item.volumeInfo.industryIdentifiers;
+                            if (ids) {
+                                const isbn13 = ids.find(id => id.type === "ISBN_13");
+                                // 日本のISBN(9784...)で、重複していないもの
+                                if (isbn13 && isbn13.identifier.startsWith('9784')) {
+                                    tempIsbns.push(isbn13.identifier);
+                                }
+                            }
+                        }
+                        
+                        // 重複除去
+                        const uniqueIsbns = [...new Set(tempIsbns)];
+
+                        if (uniqueIsbns.length > 0) {
+                            const verified = await fetchOpenBDBulk(uniqueIsbns);
+                            for (const book of verified) {
+                                // ★ここを修正: 表紙(cover)がなくても、タイトルがあればOKとする
+                                if (book && book.summary && book.summary.title) {
+                                    // 既にリストにある本は除外
+                                    if (!candidates.find(c => c.summary.isbn === book.summary.isbn)) {
+                                        candidates.push(book);
+                                    }
+                                }
+                                if (candidates.length >= targetCount) break;
+                            }
+                        }
+                    } else {
+                        log(`「${q}」でのヒットなし`);
+                    }
+                } catch (e) { console.error(e); }
+            }
+            
+            return candidates.slice(0, targetCount);
+        }
+
+        // --- OpenBD一括取得 ---
+        async function fetchOpenBDBulk(isbnList) {
+            if (isbnList.length === 0) return [];
+            const uniqueIsbns = [...new Set(isbnList)].join(',');
+            try {
+                const res = await fetch('https://api.openbd.jp/v1/get?isbn=' + uniqueIsbns);
+                const json = await res.json();
+                return json; 
+            } catch(e) { return []; }
+        }
+
+        // --- 【修正】画面描画（画像なし対応） ---
+        function renderBookCards(bookDataList) {
+            bookDataList.forEach(bookData => {
+                if (!bookData || !bookData.summary) return;
+
+                const b = bookData.summary;
+                const isbn = b.isbn;
+                const title = b.title || "タイトル不明";
+                const author = b.author || "";
+                const coverSrc = b.cover || ""; // 表紙がない場合は空文字
+                
+                // 画像タグの生成
+                let imgTag = '';
+                if (coverSrc) {
+                    imgTag = `<img class="book-cover" src="${coverSrc}">`;
+                } else {
+                    // 画像がない場合のプレースホルダー
+                    imgTag = `<div class="book-cover no-img-placeholder">NO<br>IMAGE</div>`;
+                }
+
+                const html = `
+                    <div class="book-card" id="card-${isbn}">
+                        ${imgTag}
+                        <div class="book-details">
+                            <div class="book-title">${title}</div>
+                            <div class="book-author">${author}</div>
+                            <div class="lib-status" id="status-${isbn}">
+                                <span class="waiting">蔵書確認待機中...</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                $('#bookList').append(html);
+            });
+        }
+
+        // --- 図書館一括チェック ---
+        function checkLibraryBatch(isbnList, systemId, retryCount = 0) {
+            const isbnStr = isbnList.join(',');
+            const ts = new Date().getTime();
+
+            $.ajax({
+                url: `https://api.calil.jp/check?appkey=&isbn=${isbnStr}&systemid=${systemId}&_=${ts}`,
+                dataType: 'jsonp',
+                jsonp: 'callback',
+                success: function(data) {
+                    if(data.status === 'Error') {
+                        log('APIエラー');
+                        $('button').prop('disabled', false);
+                        return;
+                    }
+
+                    updateStatusDisplay(data, isbnList, systemId);
+
+                    if (data.continue === 1) {
+                        setTimeout(() => pollingBatch(data.session, isbnList, systemId, retryCount), 2000);
+                    } else {
+                        log('全件検索完了');
+                        $('#huntStatus').text('完了');
+                        $('button').prop('disabled', false);
+                    }
+                },
+                error: function() { 
+                    log('通信エラー。再試行します。');
+                    if(retryCount < 2) setTimeout(() => checkLibraryBatch(isbnList, systemId, retryCount + 1), 2000);
+                    else $('button').prop('disabled', false);
+                }
+            });
+        }
+
+        function pollingBatch(session, isbnList, systemId, totalRetry) {
+            const ts = new Date().getTime();
+            $.ajax({
+                url: `https://api.calil.jp/polling?appkey=&session=${session}&format=json&_=${ts}`,
+                dataType: 'jsonp',
+                jsonp: 'callback',
+                success: function(data) {
+                    updateStatusDisplay(data, isbnList, systemId);
+                    
+                    if (data.continue === 1) {
+                        setTimeout(() => pollingBatch(session, isbnList, systemId, totalRetry), 2000);
+                    } else {
+                        log('全件検索完了');
+                        $('#huntStatus').text('完了');
+                        $('button').prop('disabled', false);
+                    }
+                },
+                error: function() {
+                    if (totalRetry < 2) {
+                        log('接続リセット。再接続中...');
+                        setTimeout(() => checkLibraryBatch(isbnList, systemId, totalRetry + 1), 2000);
+                    } else {
+                        $('button').prop('disabled', false);
+                    }
+                }
+            });
+        }
+
+        function updateStatusDisplay(data, isbnList, systemId) {
+            if (!data.books) return;
+
+            isbnList.forEach(isbn => {
+                const sys = data.books[isbn] && data.books[isbn][systemId];
+                const statusDiv = $(`#status-${isbn}`);
+
+                if (!sys || !sys.libkey || Object.keys(sys.libkey).length === 0) {
+                    if (data.continue === 0) {
+                        statusDiv.html('<span style="color:#aaa; font-size:0.9em;">蔵書なし</span>');
+                    }
+                    return;
+                }
+
+                let html = '';
+                for (const lib in sys.libkey) {
+                    const st = sys.libkey[lib];
+                    const cls = st === '貸出可' ? 'ok' : 'ng';
+                    html += `<span class="status-tag ${cls}">${lib}: ${st}</span>`;
+                }
+                
+                if(sys.reserveurl) {
+                   html += ` <a href="${sys.reserveurl}" target="_blank" style="font-size:0.8em; margin-left:5px; color:#007bff;">予約 ↗</a>`;
+                }
+                statusDiv.html(html);
+            });
+        }
+    </script>
+</body>
+</html>
