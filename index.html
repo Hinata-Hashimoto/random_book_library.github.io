@@ -33,7 +33,6 @@
         .book-title { font-size: 1.1em; font-weight: bold; margin: 0 0 5px; }
         .book-author { font-size: 0.9em; color: #666; margin-bottom: 8px; }
         
-        /* 検索キーワードバッジ */
         .keyword-badge { display: inline-block; background: #fce4ec; color: #c2185b; font-size: 0.8em; padding: 2px 8px; border-radius: 12px; margin-bottom: 5px; border: 1px solid #f8bbd0; }
 
         .lib-status { margin-top: 8px; font-size: 0.9em; min-height: 24px; }
@@ -63,7 +62,7 @@
             <label>2. アクション</label>
             <div class="btn-group">
                 <button onclick="startNormalSearch()" class="btn-search">ISBN指定検索</button>
-                <button onclick="startRandomHunt()" class="btn-random">ランダム選書</button>
+                <button onclick="startRandomHunt()" class="btn-random">🎲 2文字(読み)で10冊探す</button>
             </div>
             <input type="text" id="isbnInput" value="9784101061412" placeholder="ISBN (通常検索用)" style="margin-top:10px; font-family: monospace;">
         </div>
@@ -82,9 +81,7 @@
     <script>
         const PREF_LIST = ["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
         
-        // 1文字目に来ていい文字（「ん」「を」などを除く）
         const HIRAGANA_START = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもらりるれろやゆよわ";
-        // 2文字目に来ていい文字（すべてOK）
         const HIRAGANA_ALL = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもらりるれろやゆよわをん";
 
         $(document).ready(function(){
@@ -98,12 +95,13 @@
             div.prepend(`[${t}] ${msg}<br>`);
         }
 
-        // --- 図書館リスト取得 ---
+        // --- 図書館リスト取得 (Vercel Proxy経由) ---
         function fetchLibraries(pref) {
             $('#libSelect').prop('disabled', true).html('<option>取得中...</option>');
             $.ajax({
-                url: `https://api.calil.jp/library?appkey=&pref=${encodeURIComponent(pref)}&format=json`,
-                dataType: 'jsonp',
+                // URLを /api/proxy に変更し、endpointパラメータを追加
+                url: `/api/proxy?endpoint=library&pref=${encodeURIComponent(pref)}`,
+                dataType: 'json', // JSONPからJSONに変更
                 success: function(data) {
                     const sel = $('#libSelect').empty().append('<option value="">図書館を選択</option>');
                     const seen = new Set();
@@ -120,7 +118,6 @@
             });
         }
 
-        // --- 通常検索 ---
         async function startNormalSearch() {
             const isbn = $('#isbnInput').val().replace(/[^0-9]/g, '');
             const systemId = $('#libSelect').val();
@@ -136,7 +133,6 @@
             checkLibraryBatch([isbn], systemId);
         }
 
-        // --- ★ランダム10冊ハント（読み検索強化版） ---
         async function startRandomHunt() {
             const systemId = $('#libSelect').val();
             if(!systemId) return alert('図書館を選んでください');
@@ -149,7 +145,6 @@
             log('ランダム選定開始...');
 
             try {
-                // 1. 2文字ガチャで本を10冊集める
                 let verifiedBooks = await huntBooksByRandomPairs(10);
                 
                 if (verifiedBooks.length === 0) {
@@ -160,12 +155,10 @@
                 $('#bookList').empty();
                 $('#huntStatus').text('リスト作成完了');
 
-                // 2. 画面描画
                 renderBookCards(verifiedBooks);
                 
                 const isbnList = verifiedBooks.map(b => b.summary.isbn);
 
-                // 3. 問い合わせ開始
                 log('1秒後に図書館へ問い合わせます...');
                 setTimeout(() => {
                     $('#huntStatus').text('図書館へ問い合わせ中...');
@@ -180,26 +173,21 @@
             }
         }
 
-        // --- ランダム2文字生成＆検索ロジック ---
+        // --- Google Books API (ここはAPIキー不要なのでそのまま直接呼ぶ) ---
         async function huntBooksByRandomPairs(targetCount) {
             let candidates = [];
             let retry = 0;
-            const MAX_RETRY = 50; // ヒットしない文字列対策で多めにリトライ
+            const MAX_RETRY = 50; 
 
             while (candidates.length < targetCount && retry < MAX_RETRY) {
                 retry++;
                 
-                // ★2文字をランダム生成（先頭に「ん」などが来ないように配慮）
                 const char1 = HIRAGANA_START[Math.floor(Math.random() * HIRAGANA_START.length)];
                 const char2 = HIRAGANA_ALL[Math.floor(Math.random() * HIRAGANA_ALL.length)];
                 const q = char1 + char2;
                 
                 log(`読み「${q}」で検索中... (${candidates.length}/${targetCount}冊)`);
 
-                // ★検索ポイント:
-                // 1. intitle: でタイトルを検索
-                // 2. orderBy=relevance (関連度順) を追加。これで漢字のタイトルが優先されやすくなります。
-                // 3. printType=books は残しつつ、langRestrictは外してヒット率を優先
                 const startIndex = Math.floor(Math.random() * 5); 
                 const url = `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(q)}&maxResults=20&startIndex=${startIndex}&orderBy=relevance&printType=books`;
 
@@ -213,7 +201,6 @@
                             const ids = item.volumeInfo.industryIdentifiers;
                             if (ids) {
                                 const isbn13 = ids.find(id => id.type === "ISBN_13");
-                                // 日本のISBN(9784...)のみ
                                 if (isbn13 && isbn13.identifier.startsWith('9784')) {
                                     tempIsbns.push(isbn13.identifier);
                                 }
@@ -223,13 +210,10 @@
                         const uniqueIsbns = [...new Set(tempIsbns)];
 
                         if (uniqueIsbns.length > 0) {
-                            // OpenBDで実在確認（タイトル確認）
                             const verified = await fetchOpenBDBulk(uniqueIsbns);
                             
                             for (const book of verified) {
-                                // タイトルさえあればOK（画像なしでも許可）
                                 if (book && book.summary && book.summary.title) {
-                                    // 既にリストにある本は除外
                                     if (!candidates.find(c => c.summary.isbn === book.summary.isbn)) {
                                         book.searchKeyword = q;
                                         candidates.push(book);
@@ -241,14 +225,12 @@
                     }
                 } catch (e) { console.error(e); }
                 
-                // API負荷軽減
                 await new Promise(r => setTimeout(r, 100));
             }
             
             return candidates.slice(0, targetCount);
         }
 
-        // --- OpenBD一括取得 ---
         async function fetchOpenBDBulk(isbnList) {
             if (isbnList.length === 0) return [];
             const uniqueIsbns = [...new Set(isbnList)].join(',');
@@ -259,7 +241,6 @@
             } catch(e) { return []; }
         }
 
-        // --- 画面描画 ---
         function renderBookCards(bookDataList) {
             bookDataList.forEach(bookData => {
                 if (!bookData || !bookData.summary) return;
@@ -295,15 +276,16 @@
             });
         }
 
-        // --- 図書館一括チェック ---
+        // --- 蔵書確認 (Vercel Proxy経由) ---
         function checkLibraryBatch(isbnList, systemId, retryCount = 0) {
             const isbnStr = isbnList.join(',');
             const ts = new Date().getTime();
 
             $.ajax({
-                url: `https://api.calil.jp/check?appkey=&isbn=${isbnStr}&systemid=${systemId}&_=${ts}`,
-                dataType: 'jsonp',
-                jsonp: 'callback',
+                // endpoint=check
+                url: `/api/proxy?endpoint=check&isbn=${isbnStr}&systemid=${systemId}&_=${ts}`,
+                dataType: 'json', // JSONPからJSONに変更
+                // jsonp: 'callback' は削除 (通常のJSONなので不要)
                 success: function(data) {
                     if(data.status === 'Error') {
                         log('APIエラー');
@@ -329,12 +311,14 @@
             });
         }
 
+        // --- ポーリング (Vercel Proxy経由) ---
         function pollingBatch(session, isbnList, systemId, totalRetry) {
             const ts = new Date().getTime();
             $.ajax({
-                url: `https://api.calil.jp/polling?appkey=&session=${session}&format=json&_=${ts}`,
-                dataType: 'jsonp',
-                jsonp: 'callback',
+                // endpoint=polling
+                url: `/api/proxy?endpoint=polling&session=${session}&_=${ts}`,
+                dataType: 'json', // JSONPからJSONに変更
+                // jsonp: 'callback' は削除
                 success: function(data) {
                     updateStatusDisplay(data, isbnList, systemId);
                     
