@@ -61,7 +61,7 @@
         <div class="row">
             <label>2. アクション</label>
             <div class="btn-group">
-                <button onclick="startRandomHunt()" class="btn-random">ランダム選書（連打しないでね※API制限のため）</button>
+                <button onclick="startRandomHunt()" class="btn-random">ランダム選書<br>（連打しないでね※API制限のため）</button>
             </div>
             <input type="text" id="isbnInput" value="9784101061412" placeholder="ISBN (通常検索用)" style="margin-top:10px; font-family: monospace;">
         </div>
@@ -254,7 +254,7 @@
                 const imgStyle = coverSrc ? "" : "display:none;";
                 const noImgClass = coverSrc ? "" : "no-img";
                 
-                //const keywordHtml = keyword ? `<span class="keyword-badge">読み: ${keyword}</span>` : "";
+                const keywordHtml = keyword ? `<span class="keyword-badge">読み: ${keyword}</span>` : "";
 
                 const html = `
                     <div class="book-card" id="card-${isbn}">
@@ -262,7 +262,6 @@
                             ${coverSrc ? `<img src="${coverSrc}" style="width:100%; height:100%; object-fit:cover;">` : 'NO<br>IMAGE'}
                         </div>
                         <div class="book-details">
-                            ${keywordHtml}
                             <div class="book-title">${title}</div>
                             <div class="book-author">${author}</div>
                             <div class="lib-status" id="status-${isbn}">
