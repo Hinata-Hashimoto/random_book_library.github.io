@@ -1,7 +1,32 @@
-export default async function handler(req, res) {
-  const APP_KEY = process.env.CALIL_APPKEY;
+// api/proxy.js
 
-  // ★修正ポイント: queryから 'callback' と '_' (jQueryがつけるタイムスタンプ) を除外して取り出す
+// 簡易的な連打防止用メモリ（サーバーが起きている間だけ有効）
+const rateLimitMap = new Map();
+
+export default async function handler(req, res) {
+  // 1. アクセス元のIPアドレスを取得
+  const ip = req.headers['x-forwarded-for'] || 'unknown';
+  
+  // 2. 現在時刻を取得
+  const now = Date.now();
+  const limitWindow = 1000; // 制限時間（ミリ秒）: ここでは1秒に設定
+  
+  // 3. 直近のアクセス記録をチェック
+  const lastRequestTime = rateLimitMap.get(ip);
+  if (lastRequestTime && (now - lastRequestTime < limitWindow)) {
+    // 1秒未満の連打ならエラーを返して終了
+    return res.status(429).json({ error: 'Too Many Requests. Please wait a moment.' });
+  }
+  
+  // アクセス時刻を更新
+  rateLimitMap.set(ip, now);
+  
+  // 定期的にメモリをお掃除（メモリあふれ防止）
+  if (rateLimitMap.size > 1000) rateLimitMap.clear();
+
+  // --- ここから下は今までと同じ処理 ---
+  
+  const APP_KEY = process.env.CALIL_APPKEY;
   const { endpoint, callback, _, ...queryParams } = req.query;
 
   if (!endpoint) {
@@ -12,7 +37,6 @@ export default async function handler(req, res) {
   if (APP_KEY) {
     params.append('appkey', APP_KEY);
   }
-  // ★念のため callback=no を明示的に追加してJSONPを防ぐ
   params.append('format', 'json');
   params.append('callback', 'no'); 
 
@@ -25,25 +49,19 @@ export default async function handler(req, res) {
       throw new Error(`Calil API responded with status: ${response.status}`);
     }
 
-    // テキストとして一度受け取る
     const textData = await response.text();
-
-    // もし万が一、まだJSONP形式（callback(...)）で返ってきていたら、カッコの中身だけ無理やり取り出す
-    // (通常は上の callback=no で防げますが、念には念を入れた安全策です)
     let jsonString = textData;
     if (textData.trim().startsWith('callback(') || textData.trim().startsWith('no(')) {
-       // "callback( ... );" の形から ... の部分だけ抽出
        const match = textData.match(/^[a-zA-Z0-9_]+\((.*)\);?$/s);
        if (match && match[1]) {
            jsonString = match[1];
        }
     }
 
-    // JSONにパースする
     const data = JSON.parse(jsonString);
 
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate'); // キャッシュ有効化
+    res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
     res.status(200).json(data);
 
   } catch (error) {
@@ -52,7 +70,7 @@ export default async function handler(req, res) {
       details: error.message,
       debug_info: {
         targetEndpoint: endpoint,
-        isKeyLoaded: !!APP_KEY // キーがあるかだけ確認
+        isKeyLoaded: !!APP_KEY 
       }
     });
   }
