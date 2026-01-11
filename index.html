@@ -62,7 +62,7 @@
             <label>2. アクション</label>
             <div class="btn-group">
                 <button onclick="startNormalSearch()" class="btn-search">ISBN指定検索</button>
-                <button onclick="startRandomHunt()" class="btn-random">🎲 2文字(読み)で10冊探す</button>
+                <button onclick="startRandomHunt()" class="btn-random">ランダム選書（連打しないでね※API制限のため）</button>
             </div>
             <input type="text" id="isbnInput" value="9784101061412" placeholder="ISBN (通常検索用)" style="margin-top:10px; font-family: monospace;">
         </div>
@@ -225,7 +225,7 @@
                     }
                 } catch (e) { console.error(e); }
                 
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise(r => setTimeout(r, 500));
             }
             
             return candidates.slice(0, targetCount);
